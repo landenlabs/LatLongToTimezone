@@ -883,10 +883,53 @@ public class TimeZoneMapperConverter {
         writer.append("\npublic class TimezoneMapper {\r\n\r\n");
 
         // Entry-point method:
-        writer.append("    public static String latLngToTimezoneString(double lat, double lng)\n" +
+        // Entry point, with the nautical-zone correction for ocean points:
+        writer.append(
+                "    /**\n" +
+                "     * IANA time zone id for a point. The polygons also cover the oceans, giving open sea to a nearby\n" +
+                "     * (or distant) land zone, e.g. 30N 150W is America/Tijuana. A polygon zone whose standard offset\n" +
+                "     * is more than MAX_HOURS_FROM_NAUTICAL from the point's nautical zone is taken as such an ocean\n" +
+                "     * point (or \"unknown\"), and the nautical zone (Etc/GMT+-N) is returned instead.\n" +
+                "     */\n" +
+                "    public static String latLngToTimezoneString(double lat, double lng)\n" +
                 "    {\n" +
-                "        String tzId = timezoneStrings[getTzInt((float) lat, (float) lng)];\n" +
+                "        String tzId = latLngToPolygonTimezoneString(lat, lng);\n" +
+                "        if (\"unknown\".equals(tzId) || hoursFromNautical(tzId, lng) > MAX_HOURS_FROM_NAUTICAL)\n" +
+                "            return nauticalZoneId(tzForLng(lng));\n" +
                 "        return tzId;\n" +
+                "    }\n" +
+                "\n" +
+                "    /** The zone of the polygon the point falls in, with no ocean correction; may be \"unknown\". */\n" +
+                "    public static String latLngToPolygonTimezoneString(double lat, double lng)\n" +
+                "    {\n" +
+                "        return timezoneStrings[getTzInt((float) lat, (float) lng)];\n" +
+                "    }\n" +
+                "\n" +
+                "    // Real zones run up to 3 h from their nautical zone: western China (+8 at 80E), Spain, western\n" +
+                "    // Argentina, the Aleutians. Further than that is an ocean point given to a distant land zone.\n" +
+                "    public static final int MAX_HOURS_FROM_NAUTICAL = 3;\n" +
+                "\n" +
+                "    /**\n" +
+                "     * Hours between the zone's standard offset (no daylight saving, so the same all year) and the\n" +
+                "     * nautical zone, the short way round the clock: Samoa's +13 is 0 h from its nautical -11.\n" +
+                "     */\n" +
+                "    static double hoursFromNautical(String tzId, double lng)\n" +
+                "    {\n" +
+                "        double diff = java.util.TimeZone.getTimeZone(tzId).getRawOffset() / 3600000.0 - tzForLng(lng);\n" +
+                "        diff = ((diff % 24) + 24) % 24;\n" +
+                "        return Math.min(diff, 24 - diff);\n" +
+                "    }\n" +
+                "\n" +
+                "    /** Nautical time zone in hours east of UTC: 15 degrees wide, centred on its meridian. */\n" +
+                "    public static int tzForLng(double lng)\n" +
+                "    {\n" +
+                "        return (int) Math.max(-12, Math.min(12, Math.round(lng / 15)));\n" +
+                "    }\n" +
+                "\n" +
+                "    /** IANA id for a whole-hour offset east of UTC. Etc/GMT names have the opposite sign: UTC-2 is Etc/GMT+2. */\n" +
+                "    public static String nauticalZoneId(int hours)\n" +
+                "    {\n" +
+                "        return \"Etc/GMT\" + (hours <= 0 ? \"+\" : \"-\") + Math.abs(hours);\n" +
                 "    }\n" +
                 "\n");
 
