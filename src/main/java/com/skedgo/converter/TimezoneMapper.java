@@ -4,11 +4,53 @@ package com.skedgo.converter;
 
 public class TimezoneMapper {
 
+    /**
+     * IANA time zone id for a point. The polygons also cover the oceans, giving open sea to a nearby
+     * (or distant) land zone, e.g. 30N 150W is America/Tijuana. A polygon zone whose standard offset
+     * is more than MAX_HOURS_FROM_NAUTICAL from the point's nautical zone is taken as such an ocean
+     * point (or "unknown"), and the nautical zone (Etc/GMT+-N) is returned instead.
+     */
     public static String latLngToTimezoneString(double lat, double lng)
     {
-        String tzId = timezoneStrings[getTzInt((float) lat, (float) lng)];
+        String tzId = latLngToPolygonTimezoneString(lat, lng);
+        if ("unknown".equals(tzId) || hoursFromNautical(tzId, lng) > MAX_HOURS_FROM_NAUTICAL)
+            return nauticalZoneId(tzForLng(lng));
         return tzId;
     }
+
+    /** The zone of the polygon the point falls in, with no ocean correction; may be "unknown". */
+    public static String latLngToPolygonTimezoneString(double lat, double lng)
+    {
+        return timezoneStrings[getTzInt((float) lat, (float) lng)];
+    }
+
+    // Real zones run up to 3 h from their nautical zone: western China (+8 at 80E), Spain, western
+    // Argentina, the Aleutians. Further than that is an ocean point given to a distant land zone.
+    public static final int MAX_HOURS_FROM_NAUTICAL = 3;
+
+    /**
+     * Hours between the zone's standard offset (no daylight saving, so the same all year) and the
+     * nautical zone, the short way round the clock: Samoa's +13 is 0 h from its nautical -11.
+     */
+    static double hoursFromNautical(String tzId, double lng)
+    {
+        double diff = java.util.TimeZone.getTimeZone(tzId).getRawOffset() / 3600000.0 - tzForLng(lng);
+        diff = ((diff % 24) + 24) % 24;
+        return Math.min(diff, 24 - diff);
+    }
+
+    /** Nautical time zone in hours east of UTC: 15 degrees wide, centred on its meridian. */
+    public static int tzForLng(double lng)
+    {
+        return (int) Math.max(-12, Math.min(12, Math.round(lng / 15)));
+    }
+
+    /** IANA id for a whole-hour offset east of UTC. Etc/GMT names have the opposite sign: UTC-2 is Etc/GMT+2. */
+    public static String nauticalZoneId(int hours)
+    {
+        return "Etc/GMT" + (hours <= 0 ? "+" : "-") + Math.abs(hours);
+    }
+
 
 	static String[] timezoneStrings = {
 	"unknown",
